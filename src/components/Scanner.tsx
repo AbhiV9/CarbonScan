@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Scan, Zap, CheckCircle } from "lucide-react";
+import { ArrowLeft, Scan, Zap, CheckCircle, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+import { toast } from "@/hooks/use-toast";
 
 interface ScannerProps {
   onBack: () => void;
@@ -11,6 +13,7 @@ interface ScannerProps {
 export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
+  const [isCameraSupported, setIsCameraSupported] = useState(true);
 
   const mockProducts = [
     {
@@ -43,6 +46,79 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
     }
   ];
 
+  useEffect(() => {
+    checkCameraSupport();
+  }, []);
+
+  const checkCameraSupport = async () => {
+    try {
+      const { supported } = await BarcodeScanner.isSupported();
+      setIsCameraSupported(supported);
+      if (supported) {
+        await BarcodeScanner.checkPermissions();
+      }
+    } catch (error) {
+      console.log('Camera support check:', error);
+      setIsCameraSupported(false);
+    }
+  };
+
+  const requestCameraPermission = async () => {
+    try {
+      const { camera } = await BarcodeScanner.requestPermissions();
+      return camera === 'granted' || camera === 'limited';
+    } catch (error) {
+      console.error('Permission error:', error);
+      return false;
+    }
+  };
+
+  const lookupProduct = (barcode: string) => {
+    // Find product by barcode or return random for demo
+    const product = mockProducts.find(p => p.barcode === barcode) || 
+                   mockProducts[Math.floor(Math.random() * mockProducts.length)];
+    return { ...product, barcode };
+  };
+
+  const startRealScan = async () => {
+    try {
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) {
+        toast({
+          title: "Camera Permission Required",
+          description: "Please grant camera permission to scan barcodes",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setIsScanning(true);
+      setScanComplete(false);
+
+      const { barcodes } = await BarcodeScanner.scan();
+      
+      setIsScanning(false);
+      
+      if (barcodes && barcodes.length > 0) {
+        setScanComplete(true);
+        const product = lookupProduct(barcodes[0].displayValue);
+        
+        setTimeout(() => {
+          onProductScanned(product);
+        }, 1000);
+      }
+      
+    } catch (error) {
+      console.error('Scan error:', error);
+      setIsScanning(false);
+      toast({
+        title: "Scan Failed",
+        description: "Unable to start camera scanner",
+        variant: "destructive"
+      });
+    }
+  };
+
   const simulateScan = () => {
     setIsScanning(true);
     setScanComplete(false);
@@ -56,6 +132,14 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         onProductScanned(randomProduct);
       }, 1000);
     }, 3000);
+  };
+
+  const handleScan = () => {
+    if (isCameraSupported) {
+      startRealScan();
+    } else {
+      simulateScan();
+    }
   };
 
   return (
@@ -100,14 +184,16 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         {/* Instructions */}
         <div className="text-center mb-8">
           <h2 className="text-2xl font-bold text-primary mb-2">
-            {isScanning ? "Scanning..." : scanComplete ? "Scan Complete!" : "Position Barcode"}
+            {isScanning ? "Scanning..." : scanComplete ? "Scan Complete!" : "Ready to Scan"}
           </h2>
           <p className="text-muted-foreground">
             {isScanning 
-              ? "Analyzing carbon footprint..." 
+              ? "Point camera at barcode..." 
               : scanComplete 
               ? "Calculating environmental impact"
-              : "Center the barcode within the frame and tap scan"
+              : isCameraSupported 
+                ? "Tap scan to open camera"
+                : "Demo mode - tap to simulate scan"
             }
           </p>
         </div>
@@ -116,25 +202,37 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         <Button 
           variant={isScanning ? "outline" : "scan"} 
           size="lg"
-          onClick={simulateScan}
+          onClick={handleScan}
           disabled={isScanning || scanComplete}
           className="w-32 h-32 rounded-full text-lg shadow-eco"
         >
           {isScanning ? (
             <Zap className="h-8 w-8 animate-pulse" />
           ) : (
-            <Scan className="h-8 w-8" />
+            <Camera className="h-8 w-8" />
           )}
         </Button>
 
         {/* Tips */}
         <Card className="mt-8 max-w-sm">
           <CardContent className="p-4">
-            <h3 className="font-medium mb-2 text-center">Scanning Tips</h3>
+            <h3 className="font-medium mb-2 text-center">
+              {isCameraSupported ? "Scanning Tips" : "Demo Mode"}
+            </h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Ensure good lighting</li>
-              <li>• Hold device steady</li>
-              <li>• Clean barcode if needed</li>
+              {isCameraSupported ? (
+                <>
+                  <li>• Point camera at barcode</li>
+                  <li>• Ensure good lighting</li>
+                  <li>• Hold device steady</li>
+                </>
+              ) : (
+                <>
+                  <li>• Camera scanning available on mobile</li>
+                  <li>• Currently using demo mode</li>
+                  <li>• Export to run as native app</li>
+                </>
+              )}
             </ul>
           </CardContent>
         </Card>
