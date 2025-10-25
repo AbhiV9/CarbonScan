@@ -76,7 +76,7 @@ const Index = () => {
               <Button 
                 variant="outline" 
                 size="lg"
-                className="text-lg px-8 py-4 border-white/20 text-white hover:bg-white/10"
+                className="text-lg px-8 py-4 border-2 border-white bg-white/10 text-white hover:bg-white hover:text-primary backdrop-blur-sm"
                 onClick={() => setActiveView('journal')}
               >
                 <BarChart3 className="h-5 w-5" />

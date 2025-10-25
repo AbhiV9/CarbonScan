@@ -65,10 +65,17 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
 
   const requestCameraPermission = async () => {
     try {
+      console.log('Requesting camera permission...');
       const { camera } = await BarcodeScanner.requestPermissions();
+      console.log('Permission status:', camera);
       return camera === 'granted' || camera === 'limited';
     } catch (error) {
       console.error('Permission error:', error);
+      toast({
+        title: "Permission Error",
+        description: "Could not request camera permission. Please check app settings.",
+        variant: "destructive"
+      });
       return false;
     }
   };
@@ -82,7 +89,10 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
 
   const startRealScan = async () => {
     try {
+      console.log('Starting real scan...');
       const hasPermission = await requestCameraPermission();
+      console.log('Has permission:', hasPermission);
+      
       if (!hasPermission) {
         toast({
           title: "Camera Permission Required",
@@ -95,17 +105,26 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
       setIsScanning(true);
       setScanComplete(false);
 
+      console.log('Calling BarcodeScanner.scan()...');
       const { barcodes } = await BarcodeScanner.scan();
+      console.log('Scan result:', barcodes);
       
       setIsScanning(false);
       
       if (barcodes && barcodes.length > 0) {
         setScanComplete(true);
         const product = lookupProduct(barcodes[0].displayValue);
+        console.log('Product found:', product);
         
         setTimeout(() => {
           onProductScanned(product);
         }, 1000);
+      } else {
+        toast({
+          title: "No Barcode Detected",
+          description: "Please try scanning again",
+          variant: "destructive"
+        });
       }
       
     } catch (error) {
@@ -113,7 +132,7 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
       setIsScanning(false);
       toast({
         title: "Scan Failed",
-        description: "Unable to start camera scanner",
+        description: `Unable to start camera scanner: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
