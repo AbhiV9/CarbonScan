@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Scan, Zap, CheckCircle, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+import { Capacitor } from '@capacitor/core';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { toast } from "@/hooks/use-toast";
 
 interface ScannerProps {
@@ -14,6 +16,8 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
   const [isCameraSupported, setIsCameraSupported] = useState(true);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isNative = Capacitor.isNativePlatform();
 
   const mockProducts = [
     {
@@ -48,6 +52,16 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
 
   useEffect(() => {
     checkCameraSupport();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try {
+        if (videoRef.current?.srcObject) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        }
+      } catch {}
+    };
   }, []);
 
   const checkCameraSupport = async () => {
@@ -138,6 +152,38 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
     }
   };
 
+  const startWebScan = async () => {
+    try {
+      setIsScanning(true);
+      setScanComplete(false);
+      const reader = new BrowserMultiFormatReader();
+      await reader.decodeFromVideoDevice(
+        undefined,
+        videoRef.current!,
+        (result, err, controls) => {
+          if (result) {
+            const code = result.getText();
+            controls.stop();
+            setIsScanning(false);
+            setScanComplete(true);
+            const product = lookupProduct(code);
+            setTimeout(() => {
+              onProductScanned(product);
+            }, 1000);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Web scan error:', error);
+      setIsScanning(false);
+      toast({
+        title: "Scan Failed",
+        description: `Unable to access camera: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  };
+
   const simulateScan = () => {
     setIsScanning(true);
     setScanComplete(false);
@@ -154,10 +200,10 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
   };
 
   const handleScan = () => {
-    if (isCameraSupported) {
+    if (isNative && isCameraSupported) {
       startRealScan();
     } else {
-      simulateScan();
+      startWebScan();
     }
   };
 
@@ -178,6 +224,9 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         <div className="relative w-full max-w-sm aspect-square mb-8">
           {/* Camera Viewfinder */}
           <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 rounded-2xl relative overflow-hidden border-2 border-primary/20">
+            <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" autoPlay muted playsInline />
+            {/* Scanning Animation */}
+
             {/* Scanning Animation */}
             {isScanning && (
               <div className="absolute inset-0">
