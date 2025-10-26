@@ -154,8 +154,19 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
 
   const startWebScan = async () => {
     try {
+      console.log('Starting web camera scan...');
       setIsScanning(true);
       setScanComplete(false);
+      
+      // Request camera permission explicitly
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      
       const reader = new BrowserMultiFormatReader();
       await reader.decodeFromVideoDevice(
         undefined,
@@ -163,7 +174,11 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         (result, err, controls) => {
           if (result) {
             const code = result.getText();
+            console.log('Barcode detected:', code);
             controls.stop();
+            if (stream) {
+              stream.getTracks().forEach(track => track.stop());
+            }
             setIsScanning(false);
             setScanComplete(true);
             const product = lookupProduct(code);
@@ -177,8 +192,8 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
       console.error('Web scan error:', error);
       setIsScanning(false);
       toast({
-        title: "Scan Failed",
-        description: `Unable to access camera: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        title: "Camera Access Required",
+        description: "Please allow camera access to scan barcodes",
         variant: "destructive"
       });
     }
@@ -267,19 +282,27 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         </div>
 
         {/* Scan Button */}
-        <Button 
-          variant={isScanning ? "outline" : "scan"} 
-          size="lg"
-          onClick={handleScan}
-          disabled={isScanning || scanComplete}
-          className="w-32 h-32 rounded-full text-lg shadow-eco"
-        >
-          {isScanning ? (
-            <Zap className="h-8 w-8 animate-pulse" />
-          ) : (
-            <Camera className="h-8 w-8" />
-          )}
-        </Button>
+        <div className="flex flex-col items-center gap-4">
+          <Button 
+            variant="default"
+            size="lg"
+            onClick={handleScan}
+            disabled={isScanning || scanComplete}
+            className="w-40 h-40 rounded-full text-xl shadow-lg bg-primary hover:bg-primary/90 flex flex-col gap-2"
+          >
+            {isScanning ? (
+              <>
+                <Zap className="h-12 w-12 animate-pulse" />
+                <span className="text-sm">Scanning...</span>
+              </>
+            ) : (
+              <>
+                <Camera className="h-12 w-12" />
+                <span className="text-sm font-semibold">Tap to Scan</span>
+              </>
+            )}
+          </Button>
+        </div>
 
         {/* Tips */}
         <Card className="mt-8 max-w-sm">
