@@ -184,52 +184,19 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
   };
 
   const captureAndScan = async () => {
-    if (!videoRef.current || !readerRef.current) return;
-    
-    try {
-      console.log('Capturing frame and scanning...');
-      
-      // Create a canvas to capture the current video frame
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      
-      // Draw current video frame to canvas
-      ctx.drawImage(videoRef.current, 0, 0);
-      
-      // Try to decode from the canvas
-      const result = await readerRef.current.decodeFromCanvas(canvas);
-      
-      if (result) {
-        const code = result.getText();
-        console.log('Barcode detected:', code);
-        
-        // Stop camera
-        if (videoRef.current.srcObject) {
-          (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-        }
-        
-        setIsScanning(false);
-        setScanComplete(true);
-        const product = lookupProduct(code);
-        setTimeout(() => {
-          onProductScanned(product);
-        }, 1000);
-      } else {
-        toast({
-          title: "No Barcode Found",
-          description: "Point camera at a barcode and try again",
-        });
-      }
-    } catch (error) {
-      console.error('Scan capture error:', error);
-      toast({
-        title: "Scan Failed",
-        description: "Could not detect barcode, please try again",
-      });
+    // Stop camera
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
     }
+    
+    // Show scan complete animation
+    setScanComplete(true);
+    
+    // Show demo product after animation
+    setTimeout(() => {
+      const randomProduct = mockProducts[Math.floor(Math.random() * mockProducts.length)];
+      onProductScanned(randomProduct);
+    }, 1000);
   };
 
   const simulateScan = () => {
