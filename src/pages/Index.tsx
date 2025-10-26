@@ -35,7 +35,13 @@ const Index = () => {
   ];
 
   if (activeView === 'scan') {
-    return <Scanner onBack={() => setActiveView('home')} onProductScanned={setScannedProduct} />;
+    return <Scanner 
+      onBack={() => setActiveView('home')} 
+      onProductScanned={(product) => {
+        setScannedProduct(product);
+        setActiveView('home');
+      }} 
+    />;
   }
 
   if (activeView === 'journal') {
