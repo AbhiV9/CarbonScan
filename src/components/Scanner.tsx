@@ -17,6 +17,7 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
   const [scanComplete, setScanComplete] = useState(false);
   const [isCameraSupported, setIsCameraSupported] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const isNative = Capacitor.isNativePlatform();
 
   const mockProducts = [
@@ -158,36 +159,19 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
       setIsScanning(true);
       setScanComplete(false);
       
-      // Request camera permission explicitly
+      // Request camera permission and start video stream
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' } 
       });
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
       
-      const reader = new BrowserMultiFormatReader();
-      await reader.decodeFromVideoDevice(
-        undefined,
-        videoRef.current!,
-        (result, err, controls) => {
-          if (result) {
-            const code = result.getText();
-            console.log('Barcode detected:', code);
-            controls.stop();
-            if (stream) {
-              stream.getTracks().forEach(track => track.stop());
-            }
-            setIsScanning(false);
-            setScanComplete(true);
-            const product = lookupProduct(code);
-            setTimeout(() => {
-              onProductScanned(product);
-            }, 1000);
-          }
-        }
-      );
+      // Initialize reader but don't start continuous scanning
+      readerRef.current = new BrowserMultiFormatReader();
+      
     } catch (error) {
       console.error('Web scan error:', error);
       setIsScanning(false);
@@ -195,6 +179,55 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
         title: "Camera Access Required",
         description: "Please allow camera access to scan barcodes",
         variant: "destructive"
+      });
+    }
+  };
+
+  const captureAndScan = async () => {
+    if (!videoRef.current || !readerRef.current) return;
+    
+    try {
+      console.log('Capturing frame and scanning...');
+      
+      // Create a canvas to capture the current video frame
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      // Draw current video frame to canvas
+      ctx.drawImage(videoRef.current, 0, 0);
+      
+      // Try to decode from the canvas
+      const result = await readerRef.current.decodeFromCanvas(canvas);
+      
+      if (result) {
+        const code = result.getText();
+        console.log('Barcode detected:', code);
+        
+        // Stop camera
+        if (videoRef.current.srcObject) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+        }
+        
+        setIsScanning(false);
+        setScanComplete(true);
+        const product = lookupProduct(code);
+        setTimeout(() => {
+          onProductScanned(product);
+        }, 1000);
+      } else {
+        toast({
+          title: "No Barcode Found",
+          description: "Point camera at a barcode and try again",
+        });
+      }
+    } catch (error) {
+      console.error('Scan capture error:', error);
+      toast({
+        title: "Scan Failed",
+        description: "Could not detect barcode, please try again",
       });
     }
   };
@@ -283,25 +316,29 @@ export const Scanner = ({ onBack, onProductScanned }: ScannerProps) => {
 
         {/* Scan Button */}
         <div className="flex flex-col items-center gap-4">
-          <Button 
-            variant="default"
-            size="lg"
-            onClick={handleScan}
-            disabled={isScanning || scanComplete}
-            className="w-40 h-40 rounded-full text-xl shadow-lg bg-primary hover:bg-primary/90 flex flex-col gap-2"
-          >
-            {isScanning ? (
-              <>
-                <Zap className="h-12 w-12 animate-pulse" />
-                <span className="text-sm">Scanning...</span>
-              </>
-            ) : (
-              <>
-                <Camera className="h-12 w-12" />
-                <span className="text-sm font-semibold">Tap to Scan</span>
-              </>
-            )}
-          </Button>
+          {!isScanning && !scanComplete && (
+            <Button 
+              variant="default"
+              size="lg"
+              onClick={handleScan}
+              className="w-40 h-40 rounded-full text-xl shadow-lg bg-primary hover:bg-primary/90 flex flex-col gap-2"
+            >
+              <Camera className="h-12 w-12" />
+              <span className="text-sm font-semibold">Open Camera</span>
+            </Button>
+          )}
+          
+          {isScanning && !isNative && (
+            <Button 
+              variant="default"
+              size="lg"
+              onClick={captureAndScan}
+              className="w-40 h-40 rounded-full text-xl shadow-lg bg-primary hover:bg-primary/90 flex flex-col gap-2"
+            >
+              <Scan className="h-12 w-12" />
+              <span className="text-sm font-semibold">Scan Now</span>
+            </Button>
+          )}
         </div>
 
         {/* Tips */}
